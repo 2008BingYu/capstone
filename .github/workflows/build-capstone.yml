@@ -1,0 +1,69 @@
+name: Build Capstone for Android
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: capstone-engine/capstone
+          ref: next
+
+      - name: Install dependencies
+        run: sudo apt update && sudo apt install -y cmake build-essential
+
+      - name: Setup Android NDK
+        run: |
+          wget https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+          unzip -q android-ndk-r27c-linux.zip
+          echo "ANDROID_NDK=$PWD/android-ndk-r27c" >> $GITHUB_ENV
+
+      - name: Build Android armeabi-v7a
+        run: |
+          mkdir build-v7a && cd build-v7a
+          
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK}/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=armeabi-v7a \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCAPSTONE_BUILD_SHARED=OFF \
+            -DCAPSTONE_BUILD_STATIC=ON \
+            -DCAPSTONE_ARCHITECTURES="arm;aarch64"
+          
+          make -j$(nproc)
+
+      - name: Build Android arm64-v8a
+        run: |
+          mkdir build-v8a && cd build-v8a
+          
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK}/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCAPSTONE_BUILD_SHARED=OFF \
+            -DCAPSTONE_BUILD_STATIC=ON \
+            -DCAPSTONE_ARCHITECTURES="arm;aarch64"
+          
+          make -j$(nproc)
+
+      - name: Prepare release package
+        run: |
+          mkdir -p capstone-release/lib/armeabi-v7a
+          mkdir -p capstone-release/lib/arm64-v8a
+          mkdir -p capstone-release/include/capstone
+          
+          cp build-v7a/libcapstone.a capstone-release/lib/armeabi-v7a/
+          cp build-v8a/libcapstone.a capstone-release/lib/arm64-v8a/
+          cp include/capstone/*.h capstone-release/include/capstone/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcapstone-android-all
+          path: capstone-release/
